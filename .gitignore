@@ -14,3 +14,4 @@ dist/
 build/
 *.egg-info/
 docs/superpowers/
+.e2e-tmp/

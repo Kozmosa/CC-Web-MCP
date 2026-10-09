@@ -31,7 +31,9 @@ def test_wheel_metadata_keeps_runtime_dependencies_slim(wheel_metadata):
     runtime_requirements = [item for item in requirements if "extra ==" not in item]
     runtime_text = "\n".join(runtime_requirements).lower()
 
-    assert "mcp" in runtime_text
+    mcp_requirement = next(item for item in runtime_requirements if item.lower().startswith("mcp"))
+    assert ">=2.3" in mcp_requirement
+    assert "<3" in mcp_requirement
     assert "httpx" in runtime_text
     assert "beautifulsoup4" in runtime_text
     assert "markdownify" in runtime_text

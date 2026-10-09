@@ -1,7 +1,6 @@
 import logging
 
-from mcp import types
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 
 from cc_web_mcp.web import check_health, fetch_page, research_brief as build_research_brief, search_web, to_json_text
 
@@ -10,7 +9,7 @@ logging.getLogger("mcp").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "cc-web",
     instructions=(
         "cc-web 主要用于 DeepSeek、Qwen、Kimi 等缺少 Claude Code 原生 WebSearch/WebFetch 能力的第三方模型。"
@@ -23,29 +22,11 @@ mcp = FastMCP(
 async def _send_progress(ctx: Context | None, progress: int, total: int, message: str | None = None) -> None:
     if ctx is None:
         return
-    sent = False
     try:
-        request_context = ctx.request_context
-        progress_token = request_context.meta.progressToken if request_context.meta else None
-        if progress_token is not None:
-            params = types.ProgressNotificationParams(
-                progressToken=progress_token,
-                progress=progress,
-                total=total,
-                message=message,
-            )
-            notification = types.ServerNotification(
-                types.ProgressNotification(method="notifications/progress", params=params)
-            )
-            await request_context.session.send_notification(notification, ctx.request_id)
-            sent = True
+        # 2026-07-28 起 logging capability 已废弃，状态放在 progress notification 的 message 里。
+        await ctx.report_progress(progress, total, message)
     except Exception:
         pass
-    if not sent:
-        try:
-            await ctx.report_progress(progress, total)
-        except Exception:
-            pass
 
 
 def _progress_callback(ctx: Context | None, total: int = 100):
@@ -56,10 +37,6 @@ def _progress_callback(ctx: Context | None, total: int = 100):
         if ctx is None:
             return
         step = min(total - 1, step + 10)
-        try:
-            await ctx.info(message)
-        except Exception:
-            pass
         await _send_progress(ctx, step, total, message)
 
     return callback
@@ -76,7 +53,7 @@ async def web_search(
     region: str = "wt-wt",
     language: str = "zh-cn",
     domains: list[str] | None = None,
-    ctx: Context = None,
+    ctx: Context | None = None,
 ) -> str:
     """仅供缺少原生 WebSearch 的第三方模型搜索公开网页；官方 Claude 应使用内置 WebSearch。"""
     result = await search_web(query, max_results, region, language, domains=domains, status_callback=_progress_callback(ctx))
@@ -91,7 +68,7 @@ async def fetch_url(
     start_index: int = 0,
     extract_mode: str = "auto",
     ref_id: str | None = None,
-    ctx: Context = None,
+    ctx: Context | None = None,
 ) -> str:
     """抓取 http/https URL 正文并转为 Markdown；官方 Claude 默认应使用内置 WebFetch，除非用户显式要求 cc-web 或配置允许。"""
     result = await fetch_page(url, max_chars, start_index, extract_mode, ref_id=ref_id, status_callback=_progress_callback(ctx))
@@ -107,7 +84,7 @@ async def research_brief(
     region: str = "wt-wt",
     language: str = "zh-cn",
     domains: list[str] | None = None,
-    ctx: Context = None,
+    ctx: Context | None = None,
 ) -> str:
     """仅供缺少原生 WebSearch/WebFetch 的第三方模型做上下文友好的资料概览；官方 Claude 应使用内置工具。"""
     result = await build_research_brief(
